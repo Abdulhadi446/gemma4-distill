@@ -5,37 +5,64 @@ echo "================================================"
 echo "  Gemma 4 12B Distillation — Setup & Run"
 echo "================================================"
 
-# --- Check Python ---
 if ! command -v python3 &>/dev/null; then
     echo "[ERROR] python3 not found. Install Python 3.10+ first."
     exit 1
 fi
 
-# --- Check CUDA ---
 python3 -c "import torch; assert torch.cuda.is_available(), 'CUDA required'" 2>/dev/null \
-    || { echo "[ERROR] CUDA GPU not detected. This script requires a CUDA-capable GPU."; exit 1; }
+    || { echo "[ERROR] CUDA GPU not detected."; exit 1; }
 
-# --- Install deps ---
 echo ""
 echo "[1/3] Installing Python dependencies..."
-pip install -U --quiet \
-    torch \
+
+# Don't force-upgrade torch/torchvision/torchaudio — Colab pre-installs them at
+# the correct CUDA build.  Only add missing packages.
+pip install --quiet --upgrade \
     transformers \
     accelerate \
     bitsandbytes \
     pillow \
-    torchaudio \
     librosa \
-    opencv-python \
+    "opencv-python-headless" \
     tqdm \
-    scipy
+    scipy \
+    2>&1 | grep -v "already satisfied\|dependency conflict"
 
-echo "[2/3] Dependencies installed."
+# If torchvision or torchaudio are broken after the pip upgrade above,
+# reinstall them at versions matching the installed torch build.
+python3 -c "
+import torch
 
-# --- Create data dir ---
+def _fix_pkg(pkg, base, cu_short):
+    import subprocess, sys, importlib
+    try:
+        importlib.import_module(pkg)
+        # smoke test
+        if pkg == 'torchvision':
+            import torchvision  # noqa
+    except Exception:
+        pass
+    else:
+        return  # already works
+    ver = base.split('.')
+    ver = '.'.join(ver[:2])  # major.minor
+    url = 'https://download.pytorch.org/whl/torch_stable.html'
+    pip = [sys.executable, '-m', 'pip', 'install', '--quiet', '--force-reinstall',
+           f'{pkg}=={base}+cu{cu_short}', '-f', url]
+    print(f'Reinstalling {pkg}=={base}+cu{cu_short}...')
+    subprocess.check_call(pip)
+
+base = torch.__version__.split('+')[0]
+cu = torch.version.cuda.replace('.', '')
+_fix_pkg('torchvision', base, cu)
+_fix_pkg('torchaudio', base, cu)
+" 2>&1
+
+echo "[2/3] Dependencies ready."
+
 mkdir -p ./data
 
-# --- Run ---
 echo ""
 echo "[3/3] Starting distillation data generation..."
 echo ""
