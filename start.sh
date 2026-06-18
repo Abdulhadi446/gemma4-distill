@@ -20,29 +20,15 @@ echo ""
 # (Colab already has them) and skip heavy packages unless needed.
 pip install transformers accelerate bitsandbytes pillow tqdm scipy
 
-# Fix torchvision/torchaudio if they are broken (common Colab ABI mismatch).
-# torchaudio shares torch's version; torchvision uses 0.{torch_minor+15}.{patch}.
-python3 << 'PYFIX'
-import torch, subprocess, sys
-
-base = torch.__version__.split("+")[0]
-cu = torch.version.cuda.replace(".", "")
-
-# torchvision version map: torch 2.12.1 -> tv 0.27.1, torch 2.11.0 -> tv 0.26.0
-parts = base.split(".")
-tv_ver = f"0.{int(parts[1]) + 15}.{parts[2]}"
-
-for pkg, ver in [("torchvision", tv_ver), ("torchaudio", base)]:
-    try:
-        __import__(pkg)
-    except Exception:
-        print(f"[FIX] Reinstalling {pkg}=={ver}+cu{cu}")
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--force-reinstall",
-             f"{pkg}=={ver}+cu{cu}",
-             "-f", "https://download.pytorch.org/whl/torch_stable.html"]
-        )
-PYFIX
+# Fix torchvision if broken (common Colab ABI mismatch).
+python3 -c "
+import importlib, subprocess, sys
+try:
+    importlib.import_module('torchvision')
+except Exception:
+    print('[FIX] Upgrading torchvision...')
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', 'torchvision'])
+"
 
 # Optional: install audio/video libraries (needed only if processor downloads media)
 # pip install librosa opencv-python-headless
