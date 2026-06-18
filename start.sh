@@ -20,20 +20,26 @@ echo ""
 # (Colab already has them) and skip heavy packages unless needed.
 pip install transformers accelerate bitsandbytes pillow tqdm scipy
 
-# Fix torchvision if torch was upgraded under it (common Colab mismatch).
-# This does NOT install torch — only reinstalls torchvision at the matching version.
+# Fix torchvision/torchaudio if they are broken (common Colab ABI mismatch).
+# torchaudio shares torch's version; torchvision uses 0.{torch_minor+15}.{patch}.
 python3 << 'PYFIX'
 import torch, subprocess, sys
+
 base = torch.__version__.split("+")[0]
 cu = torch.version.cuda.replace(".", "")
-for pkg in ["torchvision", "torchaudio"]:
+
+# torchvision version map: torch 2.12.1 -> tv 0.27.1, torch 2.11.0 -> tv 0.26.0
+parts = base.split(".")
+tv_ver = f"0.{int(parts[1]) + 15}.{parts[2]}"
+
+for pkg, ver in [("torchvision", tv_ver), ("torchaudio", base)]:
     try:
         __import__(pkg)
     except Exception:
-        print(f"[FIX] Reinstalling {pkg} to match torch {base}+cu{cu}")
+        print(f"[FIX] Reinstalling {pkg}=={ver}+cu{cu}")
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install",
-             f"{pkg}=={base}+cu{cu}",
+            [sys.executable, "-m", "pip", "install", "--force-reinstall",
+             f"{pkg}=={ver}+cu{cu}",
              "-f", "https://download.pytorch.org/whl/torch_stable.html"]
         )
 PYFIX
