@@ -303,15 +303,15 @@ IMAGE_PROMPTS = [
     },
     {
         "prompt": "What is shown in this image? Identify all objects, people, and activities visible. Describe the spatial relationships between elements and provide a comprehensive scene understanding.",
-        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo.png",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
     {
         "prompt": "Extract the text from this screenshot or UI image. Then describe the layout: what elements are clickable, what information is displayed, and what the user can do on this screen.",
         "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
     },
     {
-        "prompt": "Analyze this scientific figure or diagram. What field of science does it relate to? Identify all labeled components, the relationships between them, and summarize what finding or concept the figure communicates.",
-        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo.png",
+        "prompt": "Analyze this scientific figure or diagram. What field of science does it relate to? Identify all labeled components, the relationships between them, and summarize what the figure communicates.",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
     {
         "prompt": "This appears to be a map or satellite image. Identify geographic features, landmarks, and any annotations. Describe what this location might be used for and what nearby points of interest exist.",
@@ -446,7 +446,7 @@ MIXED_PROMPTS = [
     },
     {
         "prompt": "Read the text in this image and cross-reference it with what you see visually. Is the text descriptive, instructive, or unrelated to the image?",
-        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo.png",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
     {
         "prompt": "A person is describing something in the audio while an image is provided. Does the audio description match the visual content? Point out specific correspondences or discrepancies.",
@@ -464,7 +464,7 @@ MIXED_PROMPTS = [
     },
     {
         "prompt": "This image contains a diagram or schematic. Describe what it represents. Write a clear, pedagogical explanation suitable for a beginner.",
-        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
     },
     {
         "prompt": "Analyze the cultural or social context of this image. What does it reveal about the society, time period, or community depicted? Reference specific visual details.",
@@ -489,7 +489,7 @@ def build_messages(content_list: list[dict]) -> list[dict]:
 
 
 def _prepare_inputs(model, processor, messages):
-    """Tokenize + move to device, casting all data tensors to model dtype."""
+    """Tokenize + move to device, casting float/byte tensors to model dtype."""
     inputs = processor.apply_chat_template(
         messages,
         tokenize=True,
@@ -498,16 +498,16 @@ def _prepare_inputs(model, processor, messages):
         add_generation_prompt=True,
         enable_thinking=False,
     )
-    # Keys that are integer indices (don't cast to bf16)
+    # Integer tensors (indices) must NEVER be cast to bf16
     index_keys = {"input_ids", "attention_mask", "position_ids", "token_type_ids"}
     for k, v in inputs.items():
         if hasattr(v, "to"):
-            if k in index_keys:
+            if k in index_keys or v.dtype in (torch.int64, torch.int32, torch.int16, torch.int8, torch.bool):
                 inputs[k] = v.to(device=model.device)
-            else:
-                # All other tensors (pixel_values, audio_values, video_values, etc.)
-                # must match model dtype (bf16)
+            elif v.dtype in (torch.uint8, torch.float32, torch.float64):
                 inputs[k] = v.to(device=model.device, dtype=model.dtype)
+            else:
+                inputs[k] = v.to(device=model.device)
     return inputs
 
 
