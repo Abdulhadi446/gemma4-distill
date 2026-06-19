@@ -76,46 +76,35 @@ def log_error(msg: str, exc: bool = True) -> None:
 # Quality scoring heuristic
 # ---------------------------------------------------------------------------
 def quality_score(response_text: str) -> float:
-    """Return a score in [0, 1] based on length, repetition, and structure."""
-    if not response_text or len(response_text.strip()) < 20:
+    if not response_text or len(response_text.strip()) < 10:
         return 0.0
 
     text = response_text.strip()
     words = text.split()
-    sentences = text.replace("!",".").replace("?",".").split(".")
+    if len(words) < 3:
+        return 0.0
 
-    # Length bonus: prefer 50-2000 chars
+    # Length score — generous curve
     length = len(text)
-    if length < 50:
-        length_score = 0.2
-    elif length < 100:
-        length_score = 0.5
-    elif length <= 2000:
-        length_score = 1.0
+    length_score = min(1.0, length / 300.0)
+
+    # Repetition penalty — bigram overlap
+    bigrams = [tuple(words[i:i+2]) for i in range(len(words) - 1)]
+    if bigrams:
+        unique_ratio = len(set(bigrams)) / len(bigrams)
+        rep_penalty = min(1.0, unique_ratio * 1.3)
     else:
-        length_score = 0.8  # very long might be rambling
+        rep_penalty = 1.0
 
-    # Repetition penalty: repeated n-grams
-    trigrams = [tuple(words[i:i+3]) for i in range(len(words)-2)]
-    if trigrams:
-        unique_ratio = len(set(trigrams)) / len(trigrams)
-        repetition_penalty = min(1.0, unique_ratio * 1.5)
-    else:
-        repetition_penalty = 1.0
+    # Sentence variety
+    sentences = [s for s in text.replace("!", ".").replace("?", ".").split(".") if len(s.strip()) > 5]
+    variety = min(1.0, len(sentences) / 4.0)
 
-    # Sentence variety: prefer 2+ sentences
-    sentence_count = max(1, len([s for s in sentences if len(s.strip()) > 5]))
-    variety_score = min(1.0, sentence_count / 6.0)
+    # Reasoning marker bonus
+    reasoning = 0.1 if any(m in text.lower() for m in
+        ["reason", "step", "therefore", "because", "first", "second", "finally"]) else 0.0
 
-    # Reasoning token presence (bonus for structured thinking)
-    reasoning_bonus = 0.0
-    for marker in ["<|think|>", "<channel|>", "reason", "step", "therefore",
-                   "because", "since", "first", "second", "finally"]:
-        if marker in text.lower():
-            reasoning_bonus = 0.1
-            break
-
-    score = 0.35 * length_score + 0.35 * repetition_penalty + 0.20 * variety_score + 0.10 * reasoning_bonus
+    score = 0.4 * length_score + 0.35 * rep_penalty + 0.15 * variety + 0.10 * reasoning
     return round(min(1.0, max(0.0, score)), 4)
 
 
@@ -298,59 +287,59 @@ IMAGE_PROMPTS = [
     },
     {
         "prompt": "Describe this image in detail. Include: the main subject, setting, colors, composition, lighting, mood, and any text visible. Then explain what story or message the image conveys.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/NASA_earth_observatory_%28astronaut_photograph%29.jpg/800px-NASA_earth_observatory_%28astronaut_photograph%29.jpg",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
     {
         "prompt": "Analyze this photograph. What time of day was it taken? What season? What geographic region might this be? Identify any landmarks, vegetation, or architectural styles visible. Justify each inference.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Mountain_View%2C_California_skyline.jpg/800px-Mountain_View%2C_California_skyline.jpg",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
     },
     {
         "prompt": "Read and extract all structured information from this image. If there is a table, list each row and column. If there is a chart, describe the axes, data trends, and key values. If there is text, transcribe it faithfully.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Global_Temperature_Anomaly_1880-2020.svg/800px-Global_Temperature_Anomaly_1880-2020.svg.png",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
     },
     {
         "prompt": "This appears to be a piece of artwork or an illustration. Describe the artistic style, technique, and influences you observe. What period or movement does it belong to? What symbolism or themes are present?",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF.jpg/800px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF.jpg",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
     {
         "prompt": "What is shown in this image? Identify all objects, people, and activities visible. Describe the spatial relationships between elements and provide a comprehensive scene understanding.",
-        "image_url": "https://raw.githubusercontent.com/huggingface/datasets/main/docs/source/en/imgs/datasets.jpg",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo.png",
     },
     {
         "prompt": "Extract the text from this screenshot or UI image. Then describe the layout: what elements are clickable, what information is displayed, and what the user can do on this screen.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Wikipedia_Mobile_Web_2022.png/800px-Wikipedia_Mobile_Web_2022.png",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
     },
     {
         "prompt": "Analyze this scientific figure or diagram. What field of science does it relate to? Identify all labeled components, the relationships between them, and summarize what finding or concept the figure communicates.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/DNA_Structure%2BKey%2BLabelled.png/800px-DNA_Structure%2BKey%2BLabelled.png",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo.png",
     },
     {
         "prompt": "This appears to be a map or satellite image. Identify geographic features, landmarks, and any annotations. Describe what this location might be used for and what nearby points of interest exist.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/World_map_%28orthographic_projection%29.svg/800px-World_map_%28orthographic_projection%29.svg.png",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
     {
         "prompt": "Describe the food or objects in this image. Identify ingredients, preparation style, and cultural origin. Assess the visual quality, presentation, and what sensory experience it suggests.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Good_Food_Display_-_NCI_Visuals_Online.jpg/800px-Good_Food_Display_-_NCI_Visuals_Online.jpg",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
     },
     {
         "prompt": "Read and transcribe any text in this image with high precision. Then translate the text into English. Finally, describe the visual context: what kind of document or scene is this, and what is its purpose?",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/JPEG_example_flower.jpg/800px-JPEG_example_flower.jpg",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
     {
         "prompt": "Analyze the people in this image. Estimate their ages, emotional states, relationships to each other, and the social context. What event or situation is captured? Support your observations with visual evidence.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Banquet_after_wedding_feast_in_Tripoli.jpg/800px-Banquet_after_wedding_feast_in_Tripoli.jpg",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
     },
     {
         "prompt": "Examine this image for text content. Read any labels, signs, or written material visible. Then describe the broader scene: location, activity, cultural context, and any story the image tells.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Times_Square_New_York_City_%28HDR%29.jpg/800px-Times_Square_New_York_City_%28HDR%29.jpg",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
     {
         "prompt": "Compare and contrast the different visual elements in this composition. Discuss foreground vs background, use of color and contrast, lighting direction, depth of field, and how these technical choices affect the viewer's perception.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/Shaolin_monk_burning_incense_2010.jpg/800px-Shaolin_monk_burning_incense_2010.jpg",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
     },
     {
         "prompt": "This image contains a visual representation of data or information. Describe the type of visualization, identify all variables plotted, interpret the key trends or patterns, and state the main conclusion a reader should draw.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Internet_users_per_100_inhabitants_ITU.svg/800px-Internet_users_per_100_inhabitants_ITU.svg.png",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
 ]
 
@@ -361,39 +350,39 @@ AUDIO_PROMPTS = [
     },
     {
         "prompt": "Listen to this audio clip and transcribe it. Then answer: What is the speaker's topic? What is their main argument or point? What tone or emotion do they convey? Provide evidence from the audio for each answer.",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/preamble10.wav",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
         "prompt": "Transcribe the speech in this audio clip. After transcription, analyze the speaker's accent or dialect. What regional or social background might they have? What clues in pronunciation, vocabulary, or rhythm support your analysis?",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/gettysburg10.wav",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
         "prompt": "Listen to this audio and provide: (1) a verbatim transcription, (2) the language being spoken, (3) the estimated number of speakers, (4) the gender and approximate age of each speaker, and (5) the emotional tone of the conversation.",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/CantinaBand3.wav",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
         "prompt": "Transcribe the following speech segment. Then summarize the content in 2-3 sentences. Finally, identify any key terms, names, or technical vocabulary used and explain what they refer to.",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/StarWars3.wav",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
-        "prompt": "Audio Speech Recognition: Transcribe this audio in English. Focus on accuracy — capture every word, including hesitations, repetitions, and false starts. Mark unclear segments with [unclear].",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/preamble10.wav",
+        "prompt": "Audio Speech Recognition: Transcribe this audio in English. Focus on accuracy, capturing every word including hesitations and false starts. Mark unclear segments with [unclear].",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
-        "prompt": "This audio contains someone reading a famous historical document. Identify which document it is, who wrote it, when it was written, and its historical significance. Then transcribe the portion you hear.",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/gettysburg10.wav",
+        "prompt": "This audio contains someone speaking. Identify the type of content (monologue, dialogue, narrative, etc.), the speaker's apparent purpose, and the overall structure of what they are saying.",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
         "prompt": "Analyze the acoustic properties of this audio sample. Describe: the recording quality, background noise level, number of channels, approximate duration, and any artifacts or distortions you detect. Then transcribe any speech content.",
         "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
-        "prompt": "Identify the language(s) spoken in this audio. Provide a transcription in the original script and a translation into English. Then describe the speaker's communicative intent: are they informing, persuading, entertaining, or something else?",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/CantinaBand60.wav",
+        "prompt": "Identify the language spoken in this audio. Provide a transcription in the original script and a translation into English. Then describe the speaker's communicative intent.",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
-        "prompt": "This is a multi-speaker audio clip. Transcribe each speaker's lines separately, labeling them as Speaker 1, Speaker 2, etc. Describe the relationship between speakers and the nature of their interaction.",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/StarWars3.wav",
+        "prompt": "This is a speech audio clip. Transcribe the content, noting the speaker's tone, pacing, and any emphasis placed on particular words or phrases. Describe what the speaker is trying to communicate.",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
 ]
 
@@ -441,7 +430,6 @@ VIDEO_PROMPTS = [
 ]
 
 MIXED_PROMPTS = [
-    # Image + Audio
     {
         "prompt": "Describe how the audio content relates to the image shown. First describe what you see in the image, then summarize what you hear in the audio, and finally explain the connection between them.",
         "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
@@ -449,46 +437,43 @@ MIXED_PROMPTS = [
     },
     {
         "prompt": "You are given an image and an audio clip. Does the audio describe or correspond to the image? Explain your reasoning. If they are unrelated, say so and describe each independently.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/NASA_earth_observatory_%28astronaut_photograph%29.jpg/800px-NASA_earth_observatory_%28astronaut_photograph%29.jpg",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/gettysburg10.wav",
-    },
-    # Image + Text (complex reasoning)
-    {
-        "prompt": "Study this image carefully. Then answer: What type of location is shown? What period or era does it represent? What cultural or historical significance does it have? Provide a detailed analysis referencing specific visual elements.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Times_Square_New_York_City_%28HDR%29.jpg/800px-Times_Square_New_York_City_%28HDR%29.jpg",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
-        "prompt": "Read the text in this image and cross-reference it with what you see visually. Is the text descriptive, instructive, or unrelated to the image? Provide a thorough analysis of the relationship between text and visual content.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Global_Temperature_Anomaly_1880-2020.svg/800px-Global_Temperature_Anomaly_1880-2020.svg.png",
+        "prompt": "Study this image carefully. Then answer: What type of location is shown? What period or era does it represent? What cultural or historical significance does it have?",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
-    # Audio + Image
+    {
+        "prompt": "Read the text in this image and cross-reference it with what you see visually. Is the text descriptive, instructive, or unrelated to the image?",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo.png",
+    },
     {
         "prompt": "A person is describing something in the audio while an image is provided. Does the audio description match the visual content? Point out specific correspondences or discrepancies.",
-        "image_url": "https://raw.githubusercontent.com/huggingface/datasets/main/docs/source/en/imgs/datasets.jpg",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/preamble10.wav",
-    },
-    # Image sequence understanding (text + image mixed via interleaved)
-    {
-        "prompt": "Here are two images. Compare them: what elements are common, what has changed, and what story do they tell together? Consider composition, content, mood, and any narrative arc.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF.jpg/800px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF.jpg",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
-        "prompt": "Combine what you learn from this image and this audio to answer: what is the broader context? Where might this scene and audio be from? What is happening just before and just after this moment?",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Good_Food_Display_-_NCI_Visuals_Online.jpg/800px-Good_Food_Display_-_NCI_Visuals_Online.jpg",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/CantinaBand3.wav",
+        "prompt": "Compare these two images. What elements are common, what has changed, and what story do they tell together?",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
     {
-        "prompt": "This image contains a diagram or schematic. Describe what it represents. Then imagine you are explaining this diagram in a tutorial — what would you say? Write a clear, pedagogical explanation suitable for a beginner.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/DNA_Structure%2BKey%2BLabelled.png/800px-DNA_Structure%2BKey%2BLabelled.png",
+        "prompt": "Combine what you learn from this image and this audio to answer: what is the broader context? Where might this scene and audio be from?",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
     },
     {
-        "prompt": "Analyze the cultural or social context of this image. What does it reveal about the society, time period, or community depicted? Reference specific visual details. Then, if the audio provides additional context, incorporate it.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Banquet_after_wedding_feast_in_Tripoli.jpg/800px-Banquet_after_wedding_feast_in_Tripoli.jpg",
-        "audio_url": "https://www2.cs.uic.edu/~i101/SoundFiles/CantinaBand60.wav",
+        "prompt": "This image contains a diagram or schematic. Describe what it represents. Write a clear, pedagogical explanation suitable for a beginner.",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
     {
-        "prompt": "Consider this image and imagine a news story that goes with it. Write a brief news article (3-4 paragraphs) that the image could illustrate. Include a headline, dateline, and quote from someone you imagine might be involved.",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/Shaolin_monk_burning_incense_2010.jpg/800px-Shaolin_monk_burning_incense_2010.jpg",
+        "prompt": "Analyze the cultural or social context of this image. What does it reveal about the society, time period, or community depicted? Reference specific visual details.",
+        "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+        "audio_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/journal1.wav",
+    },
+    {
+        "prompt": "Consider this image and imagine a news story that goes with it. Write a brief news article (3-4 paragraphs) that the image could illustrate. Include a headline, dateline, and quote.",
+        "image_url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
     },
 ]
 
@@ -503,35 +488,55 @@ def build_messages(content_list: list[dict]) -> list[dict]:
     ]
 
 
+def _prepare_inputs(model, processor, messages):
+    """Tokenize + move to device, casting float tensors to model dtype."""
+    inputs = processor.apply_chat_template(
+        messages,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+        add_generation_prompt=True,
+        enable_thinking=False,
+    )
+    for k, v in inputs.items():
+        if torch.is_floating_point(v) or k in ("pixel_values", "audio_values"):
+            inputs[k] = v.to(device=model.device, dtype=model.dtype)
+        elif hasattr(v, "to"):
+            inputs[k] = v.to(device=model.device)
+    return inputs
+
+
 def generate_sample(
     model: AutoModelForMultimodalLM,
     processor: AutoProcessor,
     messages: list[dict],
 ) -> str | None:
-    """Run generation; return the parsed response text or None on failure."""
     try:
-        inputs = processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-            enable_thinking=False,
-        ).to(model.device)
-
+        inputs = _prepare_inputs(model, processor, messages)
         input_len = inputs["input_ids"].shape[-1]
 
         with torch.inference_mode():
             outputs = model.generate(**inputs, **GEN_KWARGS)
 
-        raw_response = processor.decode(
-            outputs[0][input_len:], skip_special_tokens=False
-        )
-        parsed = processor.parse_response(raw_response)
+        # Decode cleanly (strip special tokens) first; fall back to parse_response.
+        text = processor.decode(outputs[0][input_len:], skip_special_tokens=True)
+        text = text.strip()
+
+        if text:
+            return text
+
+        # fallback: try parse_response on full decode
+        raw = processor.decode(outputs[0][input_len:], skip_special_tokens=False)
+        try:
+            parsed = processor.parse_response(raw)
+        except Exception:
+            return None
 
         if isinstance(parsed, dict):
-            return parsed.get("response", "") or parsed.get("text", "")
-        return str(parsed) if parsed else None
+            return parsed.get("response") or parsed.get("text") or None
+        if isinstance(parsed, str):
+            return parsed.strip() or None
+        return None
 
     except torch.cuda.OutOfMemoryError:
         log_error("CUDA OOM — clearing cache and skipping")
@@ -579,7 +584,7 @@ def generate_text_samples(model, processor, device, num):
             "metadata": {"source": "gemma4-12b-distill", "quality_score": score},
         }
 
-        if score >= 0.4:
+        if score >= 0.3:
             save_sample(out_path, entry)
             samples.append(entry)
         else:
@@ -615,7 +620,7 @@ def generate_image_samples(model, processor, device, num):
             "metadata": {"source": "gemma4-12b-distill", "quality_score": score},
         }
 
-        if score >= 0.4:
+        if score >= 0.3:
             save_sample(out_path, entry)
             samples.append(entry)
         else:
@@ -651,7 +656,7 @@ def generate_audio_samples(model, processor, device, num):
             "metadata": {"source": "gemma4-12b-distill", "quality_score": score},
         }
 
-        if score >= 0.4:
+        if score >= 0.3:
             save_sample(out_path, entry)
             samples.append(entry)
         else:
@@ -687,7 +692,7 @@ def generate_video_samples(model, processor, device, num):
             "metadata": {"source": "gemma4-12b-distill", "quality_score": score},
         }
 
-        if score >= 0.4:
+        if score >= 0.3:
             save_sample(out_path, entry)
             samples.append(entry)
         else:
@@ -726,7 +731,7 @@ def generate_mixed_samples(model, processor, device, num):
             "metadata": {"source": "gemma4-12b-distill", "quality_score": score},
         }
 
-        if score >= 0.4:
+        if score >= 0.3:
             save_sample(out_path, entry)
             samples.append(entry)
         else:
