@@ -41,7 +41,7 @@ SAMPLES_PER_MODALITY = {
 }
 
 GEN_KWARGS = dict(
-    max_new_tokens=1024,
+    max_new_tokens=512,
     temperature=1.0,
     top_p=0.95,
     top_k=64,
@@ -489,7 +489,7 @@ def build_messages(content_list: list[dict]) -> list[dict]:
 
 
 def _prepare_inputs(model, processor, messages):
-    """Tokenize + move to device, casting float tensors to model dtype."""
+    """Tokenize + move to device, casting all data tensors to model dtype."""
     inputs = processor.apply_chat_template(
         messages,
         tokenize=True,
@@ -498,11 +498,16 @@ def _prepare_inputs(model, processor, messages):
         add_generation_prompt=True,
         enable_thinking=False,
     )
+    # Keys that are integer indices (don't cast to bf16)
+    index_keys = {"input_ids", "attention_mask", "position_ids", "token_type_ids"}
     for k, v in inputs.items():
-        if torch.is_floating_point(v) or k in ("pixel_values", "audio_values"):
-            inputs[k] = v.to(device=model.device, dtype=model.dtype)
-        elif hasattr(v, "to"):
-            inputs[k] = v.to(device=model.device)
+        if hasattr(v, "to"):
+            if k in index_keys:
+                inputs[k] = v.to(device=model.device)
+            else:
+                # All other tensors (pixel_values, audio_values, video_values, etc.)
+                # must match model dtype (bf16)
+                inputs[k] = v.to(device=model.device, dtype=model.dtype)
     return inputs
 
 
